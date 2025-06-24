@@ -63,13 +63,20 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
                 graphs: _networkData.graphs,
                 edges: _networkData.edges,
                 sequences: _networkData.sequences,
+                sketch: _networkData.sketch,
                 progress: _controller.value,
+                borderColor: Theme.of(context).colorScheme.onSurface,
               ),
               child: Container(
                 height: double.infinity,
                 width: double.infinity,
                 color: Colors.transparent,
-                child: GestureDetector(onPanDown: _handleTouch),
+                child: GestureDetector(
+                  onPanDown: _handleTouch,
+                  onPanStart: _handleDragStart,
+                  onPanUpdate: _handleDragUpdate,
+                  onPanEnd: _handleDragEnd,
+                ),
               ),
             ),
           ),
@@ -85,7 +92,6 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       elevation: 8.0,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
-
         children: [const SizedBox(width: 5), ..._buildModeButtons()],
       ),
     );
@@ -100,10 +106,10 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
         onPressed: () => _changeMod(OperationMod.addGraph),
       ),
       ModButton(
-        mod: OperationMod.deleteAll,
-        icon: Icons.delete,
+        mod: OperationMod.moveGraph,
+        icon: Icons.move_down_outlined,
         actualMod: _operationMod,
-        onPressed: () => _changeMod(OperationMod.deleteAll),
+        onPressed: () => _changeMod(OperationMod.moveGraph),
       ),
       ModButton(
         mod: OperationMod.addEdge,
@@ -116,6 +122,13 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
         icon: Icons.arrow_forward_ios_outlined,
         actualMod: _operationMod,
         onPressed: () => _changeMod(OperationMod.addSequence),
+      ),
+
+      ModButton(
+        mod: OperationMod.deleteAll,
+        icon: Icons.delete,
+        actualMod: _operationMod,
+        onPressed: () => _changeMod(OperationMod.deleteAll),
       ),
     ];
 
@@ -148,14 +161,45 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       case OperationMod.addGraph:
         _addGraph(position);
         break;
-      case OperationMod.addEdge:
-        _addEdge(position);
-        break;
       case OperationMod.addSequence:
         _addSequence(position);
         break;
       default:
         break;
+    }
+  }
+
+  void _handleDragStart(DragStartDetails details) {
+    final position = details.localPosition;
+    switch (_operationMod) {
+      case OperationMod.moveGraph:
+        _moveGraphStart(position);
+        break;
+      case OperationMod.addEdge:
+        _initSketchLine(position);
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    if (_operationMod == OperationMod.moveGraph &&
+        _networkData.startingPoint >= 0) {
+      _moveGraphUpdate(details);
+    } else if (_operationMod == OperationMod.addEdge &&
+        _networkData.startingPoint >= 0) {
+      dragSketchLine(details);
+    }
+  }
+
+  void _handleDragEnd(DragEndDetails details) {
+    if (_operationMod == OperationMod.moveGraph &&
+        _networkData.startingPoint >= 0) {
+      _moveGraphEnd(details);
+    } else if (_operationMod == OperationMod.addEdge &&
+        _networkData.startingPoint >= 0) {
+      _addEdge(Offset(_networkData.sketch.x2, _networkData.sketch.y2));
     }
   }
 
@@ -167,9 +211,33 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
           y: position.dy,
           radius: 20.0,
           color: Colors.blue,
+          opositeColor: Colors.red,
           label: "",
         ),
       );
+    });
+  }
+
+  void _initSketchLine(Offset position) {
+    final graphPosition = _findGraphAtPosition(position);
+    if (graphPosition >= 0) {
+      setState(() {
+        _networkData.sketch.x1 = _networkData.graphs[graphPosition].x;
+        _networkData.sketch.y1 = _networkData.graphs[graphPosition].y;
+
+        _networkData.startingPoint = graphPosition;
+        _networkData.sketch.isDrawing = true;
+      });
+    } else {
+      _networkData.resetSketch();
+    }
+  }
+
+  void dragSketchLine(DragUpdateDetails details) {
+    final position = details.localPosition;
+    setState(() {
+      _networkData.sketch.x2 = position.dx;
+      _networkData.sketch.y2 = position.dy;
     });
   }
 
@@ -192,8 +260,11 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
             ),
           );
           _networkData.resetStartingPoint();
+          _networkData.resetSketch();
         }
       });
+    } else {
+      _networkData.resetSketch();
     }
   }
 
@@ -211,6 +282,40 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
           );
           _networkData.resetStartingPoint();
         }
+      });
+    }
+  }
+
+  void _moveGraphStart(Offset position) {
+    final graphPosition = _findGraphAtPosition(position);
+    if (graphPosition >= 0) {
+      setState(() {
+        _networkData.startingPoint = graphPosition;
+        _networkData.graphs[graphPosition].isSelected = true;
+      });
+    } else {
+      _networkData.resetStartingPoint();
+    }
+  }
+
+  void _moveGraphUpdate(DragUpdateDetails details) {
+    final position = details.localPosition;
+    if (_operationMod == OperationMod.moveGraph &&
+        _networkData.startingPoint >= 0) {
+      setState(() {
+        final graph = _networkData.graphs[_networkData.startingPoint];
+        graph.x = position.dx;
+        graph.y = position.dy;
+      });
+    }
+  }
+
+  void _moveGraphEnd(DragEndDetails details) {
+    if (_operationMod == OperationMod.moveGraph &&
+        _networkData.startingPoint >= 0) {
+      setState(() {
+        _networkData.graphs[_networkData.startingPoint].isSelected = false;
+        _networkData.resetStartingPoint();
       });
     }
   }

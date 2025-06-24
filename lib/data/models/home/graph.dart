@@ -6,6 +6,7 @@ class Graph {
   double radius;
   String label;
   Color color;
+  Color opositeColor;
   bool isSelected;
 
   Graph({
@@ -14,6 +15,7 @@ class Graph {
     required this.radius,
     required this.label,
     required this.color,
+    required this.opositeColor,
     this.isSelected = false,
   });
 }

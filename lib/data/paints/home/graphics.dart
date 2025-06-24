@@ -2,18 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:project_2_graphs/data/models/home/edge.dart';
 import 'package:project_2_graphs/data/models/home/graph.dart';
 import 'package:project_2_graphs/data/models/home/sequence.dart';
+import 'package:project_2_graphs/data/models/home/sketch.dart';
 
 class PaintNN extends CustomPainter {
   List<Graph> graphs;
   List<Edge> edges;
   List<Sequence> sequences;
+  Sketch sketch;
   double progress;
+  Color borderColor;
 
   PaintNN({
     required this.graphs,
     required this.edges,
     required this.sequences,
+    required this.sketch,
     required this.progress,
+    required this.borderColor,
   });
 
   @override
@@ -21,11 +26,23 @@ class PaintNN extends CustomPainter {
     Paint paintBrush = Paint()..style = PaintingStyle.fill;
 
     Paint borderBrush = Paint()
+      ..color = borderColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
+    if (sketch.isDrawing &&
+        (sketch.x1 != 0 &&
+            sketch.y1 != 0 &&
+            sketch.x2 != 0 &&
+            sketch.y2 != 0)) {
+      canvas.drawLine(
+        Offset(sketch.x1, sketch.y1),
+        Offset(sketch.x2, sketch.y2),
+        borderBrush,
+      );
+    }
+
     for (var edge in edges) {
-      borderBrush.color = edge.isSelected ? Colors.blue : Colors.black;
       canvas.drawLine(
         Offset(edge.start.x, edge.start.y),
         Offset(edge.end.x, edge.end.y),
@@ -33,7 +50,7 @@ class PaintNN extends CustomPainter {
       );
     }
     final paintPoint = Paint()
-      ..color = Colors.black
+      ..color = borderColor
       ..style = PaintingStyle.fill;
 
     Offset pointPath;
@@ -46,9 +63,8 @@ class PaintNN extends CustomPainter {
       canvas.drawCircle(pointPath, 10, paintPoint);
     }
     for (var graph in graphs) {
-      paintBrush.color = graph.color;
+      paintBrush.color = graph.isSelected ? graph.opositeColor : graph.color;
       canvas.drawCircle(Offset(graph.x, graph.y), graph.radius, paintBrush);
-      borderBrush.color = graph.isSelected ? Colors.blue : Colors.black;
       canvas.drawCircle(Offset(graph.x, graph.y), graph.radius, borderBrush);
     }
   }
