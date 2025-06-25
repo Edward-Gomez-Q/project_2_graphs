@@ -4,7 +4,9 @@ enum OperationMod {
   moveGraph(5),
   deleteAll(2),
   addEdge(3),
-  addSequence(4);
+  addSequence(4),
+
+  training(6);
 
   const OperationMod(this.value);
 

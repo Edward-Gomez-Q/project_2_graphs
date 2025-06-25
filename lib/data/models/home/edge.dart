@@ -7,6 +7,7 @@ class Edge {
   double weight;
   Color color;
   bool isSelected;
+
   Edge({
     required this.start,
     required this.end,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:project_2_graphs/data/models/splash/data_circle.dart';
-import 'dart:math';
+import 'package:project_2_graphs/presentation/pages/splash/widgets/optimized_circle.dart';
 
 class AnimatedColorPanel extends StatefulWidget {
   final double height;
@@ -22,137 +22,145 @@ class AnimatedColorPanel extends StatefulWidget {
 
 class _AnimatedColorPanelState extends State<AnimatedColorPanel>
     with SingleTickerProviderStateMixin {
-  static final Random _random = Random();
   late AnimationController _controller;
   late List<CircleData> circles;
-  late List<CircleData> targetCircles;
+  late Animation<Color?> _colorAnimation;
+  Color? _cachedBackgroundColor;
+  Color? _cachedGradientColor;
 
-  late final List<double> _precomputedXValues;
-  late final List<double> _precomputedYValues;
-  late final List<Color> _precomputedColors;
-  late final List<double> _precomputedSizes;
-
-  int _currentIndex = 0;
+  final List<Color> backgroundColors = [
+    Colors.blue,
+    Colors.purple,
+    Colors.red,
+    Colors.orange,
+    Colors.green,
+    Colors.cyan,
+  ];
 
   @override
   void initState() {
     super.initState();
-    _precomputeRandomValues();
-    _initializeCircles();
     _setupAnimationController();
+    _setupAnimationBackground();
+    _initializeCircles();
+    _controller.addListener(_onAnimationUpdate);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onAnimationUpdate);
     _controller.dispose();
+    circles.clear();
     super.dispose();
+  }
+
+  void _onAnimationUpdate() {
+    final newColor = _colorAnimation.value;
+    if (newColor != _cachedBackgroundColor) {
+      setState(() {
+        _cachedBackgroundColor = newColor;
+        _cachedGradientColor = newColor?.withValues(alpha: 0.6);
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final elapsed = _controller.value * widget.duration.inSeconds;
+
+    return Container(
       height: widget.height,
       width: widget.width,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _cachedBackgroundColor ?? Colors.blue,
+            _cachedGradientColor ?? Colors.blue.withValues(alpha: 0.6),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
       child: Stack(
-        children: circles.asMap().entries.map((entry) {
-          final circle = entry.value;
-          return AnimatedPositioned(
-            duration: widget.duration,
-            left: circle.left,
-            top: circle.top,
-            child: AnimatedContainer(
-              duration: widget.duration,
-              width: circle.size,
-              height: circle.size,
-              decoration: BoxDecoration(
-                color: circle.color.withValues(alpha: 0.6),
-                shape: BoxShape.circle,
-              ),
-            ),
+        children: circles.map((circle) {
+          return OptimizedCircle(
+            circle: circle,
+            elapsed: elapsed,
+            containerWidth: widget.width,
           );
         }).toList(),
       ),
     );
   }
 
-  void _precomputeRandomValues() {
-    const int poolSize = 1000;
-
-    _precomputedXValues = List.generate(
-      poolSize,
-      (_) => _random.nextDouble() * widget.width,
-    );
-
-    _precomputedYValues = List.generate(
-      poolSize,
-      (_) => _random.nextDouble() * widget.height,
-    );
-
-    _precomputedColors = List.generate(poolSize, (_) {
-      return Color.fromARGB(
-        255,
-        _random.nextInt(256),
-        _random.nextInt(256),
-        _random.nextInt(256),
-      );
-    });
-
-    _precomputedSizes = List.generate(
-      poolSize,
-      (_) => _random.nextDouble() * 40 + 10,
-    );
-  }
-
   void _initializeCircles() {
-    circles = List.generate(
-      widget.circleCount,
-      (index) => _getCircleFromPool(index),
-    );
-    targetCircles = List.generate(
-      widget.circleCount,
-      (index) => _getCircleFromPool(index + widget.circleCount),
-    );
-  }
-
-  CircleData _getCircleFromPool(int seed) {
-    final xIndex = (seed * 17) % _precomputedXValues.length;
-    final yIndex = (seed * 23) % _precomputedYValues.length;
-    final colorIndex = (seed * 31) % _precomputedColors.length;
-    final sizeIndex = (seed * 37) % _precomputedSizes.length;
-
-    return CircleData(
-      left: _precomputedXValues[xIndex],
-      top: _precomputedYValues[yIndex],
-      color: _precomputedColors[colorIndex],
-      size: _precomputedSizes[sizeIndex],
-    );
+    // Reducir número de círculos para mejor rendimiento
+    circles = [
+      CircleData(
+        top: 50,
+        size: 30,
+        speed: 20,
+        color: Colors.white.withValues(alpha: 0.3),
+      ),
+      CircleData(
+        top: 100,
+        size: 40,
+        speed: 15,
+        color: Colors.white.withValues(alpha: 0.4),
+      ),
+      CircleData(
+        top: 150,
+        size: 50,
+        speed: 10,
+        color: Colors.white.withValues(alpha: 0.5),
+      ),
+      CircleData(
+        top: 200,
+        size: 60,
+        speed: 5,
+        color: Colors.white.withValues(alpha: 0.6),
+      ),
+      CircleData(
+        top: 250,
+        size: 70,
+        speed: 3,
+        color: Colors.white.withValues(alpha: 0.7),
+      ),
+      CircleData(
+        top: 300,
+        size: 80,
+        speed: 2,
+        color: Colors.white.withValues(alpha: 0.8),
+      ),
+      CircleData(
+        top: 350,
+        size: 90,
+        speed: 1,
+        color: Colors.white.withValues(alpha: 0.9),
+      ),
+    ];
   }
 
   void _setupAnimationController() {
-    _controller = AnimationController(duration: widget.duration, vsync: this);
-
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        _updateCircles();
-        _controller.reset();
-        _controller.forward();
-      }
-    });
-
-    _controller.forward();
+    _controller = AnimationController(duration: widget.duration, vsync: this)
+      ..repeat();
   }
 
-  void _updateCircles() {
-    setState(() {
-      final temp = circles;
-      circles = targetCircles;
-      targetCircles = temp;
-      for (int i = 0; i < widget.circleCount; i++) {
-        _currentIndex =
-            (_currentIndex + 1) %
-            (_precomputedXValues.length - widget.circleCount);
-        targetCircles[i] = _getCircleFromPool(_currentIndex + i);
-      }
-    });
+  void _setupAnimationBackground() {
+    _colorAnimation = _controller.drive(
+      TweenSequence<Color?>(
+        List.generate(backgroundColors.length, (index) {
+          final next = backgroundColors[(index + 1) % backgroundColors.length];
+          return TweenSequenceItem(
+            tween: ColorTween(begin: backgroundColors[index], end: next),
+            weight: 1.0,
+          );
+        }),
+      ),
+    );
+
+    // Inicializar colores cache
+    _cachedBackgroundColor = backgroundColors.first;
+    _cachedGradientColor = backgroundColors.first.withValues(alpha: 0.6);
   }
 }
