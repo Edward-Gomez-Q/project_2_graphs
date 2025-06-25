@@ -7,6 +7,7 @@ import 'package:project_2_graphs/data/models/home/operation_mod.dart';
 import 'package:project_2_graphs/data/models/home/sequence.dart';
 import 'package:project_2_graphs/data/paints/home/graphics.dart';
 import 'package:project_2_graphs/presentation/pages/home/widgets/bias_input_dialog.dart';
+import 'package:project_2_graphs/presentation/pages/home/widgets/cartesian_plane.dart';
 import 'package:project_2_graphs/presentation/pages/home/widgets/graph_type_selector.dart';
 import 'package:project_2_graphs/presentation/pages/home/widgets/mod_button.dart';
 import 'package:project_2_graphs/presentation/pages/home/widgets/training_panel.dart';
@@ -25,9 +26,8 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
   late AnimationController _controller;
   late final Duration _animationDuration = const Duration(seconds: 2);
-
   bool _showTrainingPanel = false;
-  OverlayEntry? _overlayEntry;
+  bool _showCartesianPlane = false;
 
   @override
   void initState() {
@@ -49,7 +49,6 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     _controller.dispose();
-    _overlayEntry?.remove();
     super.dispose();
   }
 
@@ -60,10 +59,6 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
       backgroundColor: theme.scaffoldBackgroundColor,
       body: _buildBody(),
       bottomNavigationBar: _buildBottomBar(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _toggleTrainingPanel,
-        child: Icon(_showTrainingPanel ? Icons.close : Icons.table_chart),
-      ),
     );
   }
 
@@ -98,11 +93,13 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
           ),
           if (_showTrainingPanel)
             Positioned(
-              top: 0,
               left: 0,
               right: 0,
+              bottom: 0,
               child: TrainingPanel(networkData: _networkData),
             ),
+          if (_showCartesianPlane)
+            CartesianPlaneWidget(networkData: _networkData),
         ],
       ),
     );
@@ -157,6 +154,24 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
         icon: Icons.play_arrow,
         actualMod: _operationMod,
         onPressed: () => _changeMod(OperationMod.training),
+      ),
+      ModButton(
+        mod: OperationMod.notSelected,
+        icon: Icons.table_chart,
+        actualMod: _operationMod,
+        onPressed: () {
+          _toggleTrainingPanel();
+        },
+      ),
+      ModButton(
+        mod: OperationMod.notSelected,
+        icon: Icons.grid_view,
+        actualMod: _operationMod,
+        onPressed: () {
+          setState(() {
+            _showCartesianPlane = !_showCartesianPlane;
+          });
+        },
       ),
     ];
 

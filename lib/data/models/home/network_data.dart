@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:project_2_graphs/data/models/home/edge.dart';
 import 'package:project_2_graphs/data/models/home/epoch_result.dart';
 import 'package:project_2_graphs/data/models/home/graph.dart';
@@ -16,10 +18,10 @@ class NetworkData {
 
   int rowsLength = 0;
 
-  int epochs = 1000;
+  int epochs = 5000;
   int currentEpoch = 0;
   List<List<int>> trainingInputs = [];
-  double learningRate = 0.01;
+  double learningRate = 0.1;
 
   bool isTraining = false;
   List<List<double>> epochHistory = [];
@@ -39,6 +41,7 @@ class NetworkData {
     isTraining = false;
     hasConverged = false;
     epochHistory.clear();
+    currentTrainingHistory = null;
   }
 
   void resetStartingPoint() {
@@ -345,6 +348,8 @@ class NetworkData {
   void _trainMultilayerNetwork(List<List<Graph>> layers, Duration duration) {
     if (currentEpoch == 0) {
       isTraining = true;
+      print('=== INICIANDO ENTRENAMIENTO ===');
+      _initializeNetwork(layers);
     }
 
     if (currentEpoch >= epochs || hasConverged || !isTraining) {
@@ -353,34 +358,38 @@ class NetworkData {
       return;
     }
 
-    print('=== Época Multicapa ${currentEpoch + 1} ===');
+    print('\n=== Época ${currentEpoch + 1} ===');
     double totalError = 0.0;
 
+    // Procesar cada patrón de entrenamiento
     for (int rowIndex = 0; rowIndex < rowsLength; rowIndex++) {
       List<int> inputs = trainingInputs[rowIndex];
-      _forwardPass(layers, inputs, rowIndex);
-      Graph outputPerceptron = layers.last[0];
-      int expectedOutput = outputPerceptron.expectedOutputs![rowIndex];
-      double actualOutput = outputPerceptron.outputs![rowIndex];
+      int expectedOutput = layers.last[0].expectedOutputs![rowIndex];
+
+      // 1. Forward pass
+      _forwardPassSimple(layers, inputs, rowIndex);
+
+      // 2. Calcular error de salida
+      Graph outputNode = layers.last[0];
+      double actualOutput = outputNode.outputs![rowIndex];
       double outputError = expectedOutput - actualOutput;
-      outputPerceptron.error![rowIndex] = outputError;
+      outputNode.error![rowIndex] = outputError;
+
       totalError += outputError.abs();
-      _backwardPass(layers, rowIndex);
-      _updateWeights(layers, inputs, rowIndex);
-      print(
-        'Fila $rowIndex: Output=${actualOutput.toInt()}, Expected=$expectedOutput, Error=${outputError.toStringAsFixed(3)}',
-      );
+
+      // 3. Backward pass
+      _backwardPassSimple(layers, rowIndex);
+
+      // 4. Actualizar pesos
+      _updateWeightsSimple(layers, inputs, rowIndex);
     }
-
-    print('Error total multicapa: ${totalError.toStringAsFixed(3)}');
-
     currentEpoch++;
 
     // Verificar convergencia
-    if (totalError == 0) {
+    if (totalError < 0.1) {
       hasConverged = true;
       isTraining = false;
-      print("¡Convergencia multicapa alcanzada en la época $currentEpoch!");
+      print("¡Convergencia alcanzada!");
       return;
     }
 
@@ -388,163 +397,173 @@ class NetworkData {
     if (currentEpoch < epochs && isTraining) {
       Future.delayed(duration, () {
         if (isTraining) {
-          _trainMultilayerNetwork(layers, duration);
+          _trainMultilayerNetwork(layers, Duration(milliseconds: 3));
         }
       });
     } else {
       isTraining = false;
-      print("Entrenamiento multicapa finalizado");
+      print("Entrenamiento finalizado");
     }
   }
 
-  void _forwardPass(List<List<Graph>> layers, List<int> inputs, int rowIndex) {
-    // Procesar cada capa
-    for (int layerIndex = 0; layerIndex < layers.length; layerIndex++) {
-      List<Graph> currentLayer = layers[layerIndex];
+  // INICIALIZACIÓN CORRECTA
+  void _initializeNetwork(List<List<Graph>> layers) {
+    Random random = Random();
 
-      for (Graph perceptron in currentLayer) {
-        double weightedSum;
+    // Inicializar pesos aleatorios pequeños
+    for (Edge edge in edges) {
+      edge.weight = (random.nextDouble() - 0.5) * 2.0; // Rango [-1, 1]
+    }
 
-        if (layerIndex == 0) {
-          // Primera capa oculta: usar inputs originales
-          weightedSum = _calculateWeightedSum(perceptron, inputs);
-        } else {
-          // Capas siguientes: usar outputs de la capa anterior
-          List<double> previousOutputs = [];
-          List<Graph> previousLayer = layers[layerIndex - 1];
-
-          for (Graph prevPerceptron in previousLayer) {
-            if (perceptron.inputsGraphs != null &&
-                perceptron.inputsGraphs!.contains(prevPerceptron)) {
-              previousOutputs.add(prevPerceptron.outputs![rowIndex]);
-            }
-          }
-
-          weightedSum = _calculateWeightedSumFromOutputs(
-            perceptron,
-            previousOutputs,
-          );
-        }
-
-        perceptron.weightedSum![rowIndex] = weightedSum;
-        double output = activationFunction(weightedSum);
-        perceptron.outputs![rowIndex] = output;
+    // Inicializar bias aleatorios pequeños
+    for (List<Graph> layer in layers) {
+      for (Graph node in layer) {
+        node.bias = (random.nextDouble() - 0.5) * 2.0; // Rango [-1, 1]
       }
     }
+
+    print('Red inicializada con pesos aleatorios');
   }
 
-  // Backward pass: propagar errores hacia atrás
-  void _backwardPass(List<List<Graph>> layers, int rowIndex) {
-    // Procesar capas desde la salida hacia la entrada
-    for (int layerIndex = layers.length - 2; layerIndex >= 0; layerIndex--) {
-      List<Graph> currentLayer = layers[layerIndex];
-      List<Graph> nextLayer = layers[layerIndex + 1];
-
-      for (Graph perceptron in currentLayer) {
-        double errorSum = 0.0;
-
-        // Sumar errores ponderados de la capa siguiente
-        for (Graph nextPerceptron in nextLayer) {
-          if (nextPerceptron.inputsGraphs != null &&
-              nextPerceptron.inputsGraphs!.contains(perceptron)) {
-            // Encontrar el peso de la conexión
-            Edge? connectionEdge = _findEdgeBetween(perceptron, nextPerceptron);
-            if (connectionEdge != null) {
-              double nextError = nextPerceptron.error![rowIndex];
-              errorSum += nextError * connectionEdge.weight;
-            }
-          }
-        }
-
-        // Error = errorSum * derivada de la función de activación
-        double output = perceptron.outputs![rowIndex];
-        double derivative = _activationDerivative(output);
-        perceptron.error![rowIndex] = errorSum * derivative;
-      }
-    }
-  }
-
-  // Actualizar pesos y bias
-  void _updateWeights(
+  // FORWARD PASS SIMPLIFICADO
+  void _forwardPassSimple(
     List<List<Graph>> layers,
-    List<int> originalInputs,
+    List<int> inputs,
     int rowIndex,
   ) {
     for (int layerIndex = 0; layerIndex < layers.length; layerIndex++) {
       List<Graph> currentLayer = layers[layerIndex];
 
-      for (Graph perceptron in currentLayer) {
-        double error = perceptron.error![rowIndex];
+      for (Graph node in currentLayer) {
+        double sum = node.bias ?? 0.0;
 
-        // Actualizar pesos de las conexiones de entrada
-        List<Edge> inputEdges = getInputEdgesForPerceptron(perceptron);
+        if (layerIndex == 0) {
+          // Primera capa: conectada a inputs
+          List<Edge> inputEdges = getInputEdgesForPerceptron(node);
+          List<Graph> inputNodes = getInputGraphs();
+
+          for (Edge edge in inputEdges) {
+            int inputIndex = inputNodes.indexOf(edge.start);
+            if (inputIndex >= 0 && inputIndex < inputs.length) {
+              sum += edge.weight * inputs[inputIndex];
+            }
+          }
+        } else {
+          // Capas ocultas/salida: conectadas a capa anterior
+          List<Graph> previousLayer = layers[layerIndex - 1];
+          List<Edge> inputEdges = getInputEdgesForPerceptron(node);
+
+          for (Edge edge in inputEdges) {
+            if (previousLayer.contains(edge.start)) {
+              sum += edge.weight * edge.start.outputs![rowIndex];
+            }
+          }
+        }
+
+        node.weightedSum![rowIndex] = sum;
+        node.outputs![rowIndex] = _sigmoid(sum);
+      }
+    }
+  }
+
+  // BACKWARD PASS SIMPLIFICADO
+  void _backwardPassSimple(List<List<Graph>> layers, int rowIndex) {
+    // Propagar error hacia atrás desde la salida
+    for (int layerIndex = layers.length - 2; layerIndex >= 0; layerIndex--) {
+      List<Graph> currentLayer = layers[layerIndex];
+      List<Graph> nextLayer = layers[layerIndex + 1];
+
+      for (Graph node in currentLayer) {
+        double errorSum = 0.0;
+
+        // Sumar errores de todas las conexiones hacia la siguiente capa
+        for (Graph nextNode in nextLayer) {
+          Edge? edge = _findEdgeBetween(node, nextNode);
+          if (edge != null) {
+            errorSum += nextNode.error![rowIndex] * edge.weight;
+          }
+        }
+
+        // Error = suma_errores * derivada_activación
+        double output = node.outputs![rowIndex];
+        double derivative = _sigmoidDerivative(output);
+        node.error![rowIndex] = errorSum * derivative;
+      }
+    }
+  }
+
+  // ACTUALIZACIÓN DE PESOS SIMPLIFICADA
+  void _updateWeightsSimple(
+    List<List<Graph>> layers,
+    List<int> inputs,
+    int rowIndex,
+  ) {
+    double learningRate = 0.5; // Usar valor fijo para simplicidad
+
+    for (int layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+      List<Graph> currentLayer = layers[layerIndex];
+
+      for (Graph node in currentLayer) {
+        double error = node.error![rowIndex];
+
+        // Actualizar bias
+        node.bias = (node.bias ?? 0.0) + learningRate * error;
+
+        // Actualizar pesos
+        List<Edge> inputEdges = getInputEdgesForPerceptron(node);
 
         for (Edge edge in inputEdges) {
           double inputValue;
 
           if (layerIndex == 0) {
             // Primera capa: usar inputs originales
-            List<Graph> inputGraphs = getInputGraphs();
-            int inputIndex = inputGraphs.indexOf(edge.start);
-            inputValue =
-                (inputIndex != -1 && inputIndex < originalInputs.length)
-                ? originalInputs[inputIndex].toDouble()
+            List<Graph> inputNodes = getInputGraphs();
+            int inputIndex = inputNodes.indexOf(edge.start);
+            inputValue = (inputIndex >= 0 && inputIndex < inputs.length)
+                ? inputs[inputIndex].toDouble()
                 : 0.0;
           } else {
-            // Capas posteriores: usar output del perceptrón anterior
+            // Capas posteriores: usar output de la neurona anterior
             inputValue = edge.start.outputs![rowIndex];
           }
 
           edge.weight += learningRate * error * inputValue;
         }
-
-        // Actualizar bias
-        perceptron.bias = (perceptron.bias ?? 0.0) + learningRate * error;
       }
     }
   }
 
-  // Funciones auxiliares
-  double _calculateWeightedSum(Graph perceptron, List<int> inputs) {
-    double sum = perceptron.bias ?? 0.0;
-    List<Edge> inputEdges = getInputEdgesForPerceptron(perceptron);
-    List<Graph> inputGraphs = getInputGraphs();
-
-    for (Edge edge in inputEdges) {
-      int inputIndex = inputGraphs.indexOf(edge.start);
-      if (inputIndex != -1 && inputIndex < inputs.length) {
-        sum += edge.weight * inputs[inputIndex];
-      }
-    }
-
-    return sum;
+  // FUNCIONES DE ACTIVACIÓN CORRECTAS
+  double _sigmoid(double x) {
+    if (x > 500) return 1.0; // Evitar overflow
+    if (x < -500) return 0.0;
+    return 1.0 / (1.0 + exp(-x));
   }
 
-  double _calculateWeightedSumFromOutputs(
-    Graph perceptron,
-    List<double> previousOutputs,
-  ) {
-    double sum = perceptron.bias ?? 0.0;
-    List<Edge> inputEdges = getInputEdgesForPerceptron(perceptron);
-
-    for (int i = 0; i < inputEdges.length && i < previousOutputs.length; i++) {
-      sum += inputEdges[i].weight * previousOutputs[i];
-    }
-
-    return sum;
+  double _sigmoidDerivative(double sigmoidOutput) {
+    return sigmoidOutput * (1.0 - sigmoidOutput);
   }
 
+  // FUNCIÓN AUXILIAR MEJORADA
   Edge? _findEdgeBetween(Graph start, Graph end) {
-    return edges.firstWhere(
-      (edge) => edge.start == start && edge.end == end,
-      orElse: () => null as Edge,
-    );
+    try {
+      return edges.firstWhere((edge) => edge.start == start && edge.end == end);
+    } catch (e) {
+      return null;
+    }
   }
 
-  double _activationDerivative(double output) {
-    // Para función escalón, usar aproximación con sigmoid
-    // Si usas sigmoid: return output * (1 - output);
-    // Para escalón, usar una constante pequeña
-    return 0.1;
+  // PARA DEBUGGING - Imprimir estado de la red
+  void _printNetworkState(List<List<Graph>> layers, int rowIndex) {
+    print('--- Estado de la red ---');
+    for (int i = 0; i < layers.length; i++) {
+      print('Capa $i:');
+      for (int j = 0; j < layers[i].length; j++) {
+        Graph node = layers[i][j];
+        print(
+          '  Neurona $j: output=${node.outputs![rowIndex].toStringAsFixed(3)}, bias=${(node.bias ?? 0.0).toStringAsFixed(3)}',
+        );
+      }
+    }
   }
 }
