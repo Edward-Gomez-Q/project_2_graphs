@@ -12,8 +12,8 @@ class Graph {
   bool isSelected;
 
   GraphType type;
-  double? inputValue;
-  double? outputValue;
+  List<Graph>? inputsGraphs;
+  List<Graph>? outputsGraphs;
 
   LogicOperation? operation;
   double? bias = 0.0;
@@ -33,8 +33,8 @@ class Graph {
     required this.opositeColor,
     this.isSelected = false,
     this.type = GraphType.input,
-    this.inputValue,
-    this.outputValue,
+    this.inputsGraphs,
+    this.outputsGraphs,
 
     this.operation,
     this.bias,

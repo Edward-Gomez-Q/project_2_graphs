@@ -22,7 +22,9 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   OperationMod _operationMod = OperationMod.notSelected;
   final NetworkData _networkData = NetworkData();
+
   late AnimationController _controller;
+  late final Duration _animationDuration = const Duration(seconds: 2);
 
   bool _showTrainingPanel = false;
   OverlayEntry? _overlayEntry;
@@ -36,7 +38,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   void _initAnimation() {
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: _animationDuration,
     );
     _controller.addListener(() {
       setState(() {});
@@ -79,6 +81,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
                 sketch: _networkData.sketch,
                 progress: _controller.value,
                 borderColor: Theme.of(context).colorScheme.onSurface,
+                isTraining: _networkData.isTraining,
               ),
               child: Container(
                 height: double.infinity,
@@ -221,18 +224,14 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
   void _startTraining(Offset position) {
     if (_networkData.graphs.isEmpty) return;
-    // Validar que se haya presionado sobre un grafo perceptron
     final graphPosition = _findGraphAtPosition(position);
     if (graphPosition >= 0) {
       final graph = _networkData.graphs[graphPosition];
-      bool isPerceptronTraining = false;
-      if (graph.type == GraphType.perceptron) {
+      // Verificar que el grafo seleccionado sea de tipo perceptrón y que no tenga conexiones de salida
+      if (graph.type == GraphType.perceptron &&
+          (graph.outputsGraphs == null || graph.outputsGraphs!.isEmpty)) {
         setState(() {
-          isPerceptronTraining = _networkData.startTraining(
-            graph,
-            Duration(seconds: 3),
-          );
-          print('Training started: $isPerceptronTraining');
+          _networkData.startMultilayerTraining(graph, _animationDuration);
         });
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -360,6 +359,10 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
                   weight: weight,
                 ),
               );
+              startGraph.outputsGraphs ??= [];
+              endGraph.inputsGraphs ??= [];
+              startGraph.outputsGraphs!.add(endGraph);
+              endGraph.inputsGraphs!.add(startGraph);
               _networkData.resetStartingPoint();
               _networkData.resetSketch();
             });
@@ -401,10 +404,43 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
         if (_networkData.startingPoint == -1) {
           _networkData.startingPoint = graphPosition;
         } else {
+          //Validar que el nodo de inicio y el nodo final no sean el mismo
+          if (_networkData.startingPoint == graphPosition) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Seleccione nodos diferentes para la secuencia'),
+              ),
+            );
+            return;
+          }
           final startGraph = _networkData.graphs[_networkData.startingPoint];
           final endGraph = _networkData.graphs[graphPosition];
+          // Validar que exista un edge entre los dos nodos
+          Edge? edgeExists;
+          for (var edge in _networkData.edges) {
+            if ((edge.start == startGraph && edge.end == endGraph) ||
+                (edge.start == endGraph && edge.end == startGraph)) {
+              edgeExists = edge;
+              break;
+            }
+          }
+          if (edgeExists == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Debe haber un edge entre los nodos seleccionados',
+                ),
+              ),
+            );
+            return;
+          }
           _networkData.sequences.add(
-            Sequence(start: startGraph, end: endGraph, section: 0.0),
+            Sequence(
+              start: startGraph,
+              end: endGraph,
+              section: 0.0,
+              edge: edgeExists,
+            ),
           );
           _networkData.resetStartingPoint();
         }
